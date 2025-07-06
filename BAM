@@ -1,7 +1,6 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-
 $Form = New-Object Windows.Forms.Form
 $Form.Text = "BAM & MuiCache Parser"
 $Form.Size = New-Object Drawing.Size(1200, 600)
@@ -13,13 +12,14 @@ $ListView.FullRowSelect = $true
 $ListView.GridLines = $true
 $ListView.Size = New-Object Drawing.Size(1160, 450)
 $ListView.Location = New-Object Drawing.Point(10, 10)
-$ListView.Columns.Add("Execution Time", 130)
-$ListView.Columns.Add("User UTC Time", 130)
-$ListView.Columns.Add("Local Time", 130)
-$ListView.Columns.Add("App Name", 160)
-$ListView.Columns.Add("Path", 360)
-$ListView.Columns.Add("Signature", 120)
-$ListView.Columns.Add("SID/User", 120)
+
+$ListView.Columns.Add("Execution Time", 130) | Out-Null
+$ListView.Columns.Add("User UTC Time", 130) | Out-Null
+$ListView.Columns.Add("Local Time", 130) | Out-Null
+$ListView.Columns.Add("App Name", 160) | Out-Null
+$ListView.Columns.Add("Path", 360) | Out-Null
+$ListView.Columns.Add("Signature", 120) | Out-Null
+$ListView.Columns.Add("SID/User", 120) | Out-Null
 
 $Form.Controls.Add($ListView)
 
@@ -41,7 +41,6 @@ $Form.Controls.Add($StartButton)
 $Form.Controls.Add($ProgressBar)
 $Form.Controls.Add($StatusLabel)
 
-
 function Get-Signature {
     param ($FilePath)
     try {
@@ -55,7 +54,6 @@ function Get-Signature {
         return "N/A"
     }
 }
-
 
 function Start-BAMKeyAnalysis {
     $ListView.Items.Clear()
@@ -72,17 +70,17 @@ function Start-BAMKeyAnalysis {
                 $sig = Get-Signature -FilePath $path
 
                 $ListViewItem = New-Object Windows.Forms.ListViewItem("")
-                $ListViewItem.SubItems.Add("")
-                $ListViewItem.SubItems.Add("")
-                $ListViewItem.SubItems.Add($appName)
-                $ListViewItem.SubItems.Add($path)
-                $ListViewItem.SubItems.Add($sig)
-                $ListViewItem.SubItems.Add("CurrentUser")
-                $ListView.Items.Add($ListViewItem)
+                $ListViewItem.SubItems.Add("") | Out-Null
+                $ListViewItem.SubItems.Add("") | Out-Null
+                $ListViewItem.SubItems.Add($appName) | Out-Null
+                $ListViewItem.SubItems.Add($path) | Out-Null
+                $ListViewItem.SubItems.Add($sig) | Out-Null
+                $ListViewItem.SubItems.Add("CurrentUser") | Out-Null
+                $ListView.Items.Add($ListViewItem) | Out-Null
             }
         }
     } catch {
-        Write-Warning "Failed to parse MuiCache."
+        # Silently ignore MuiCache parse failures
     }
 
     $ProgressBar.Value = 50
@@ -108,17 +106,17 @@ function Start-BAMKeyAnalysis {
                 $sig = Get-Signature -FilePath $path
 
                 $ListViewItem = New-Object Windows.Forms.ListViewItem($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
-                $ListViewItem.SubItems.Add($dateUTC.ToString("yyyy-MM-dd HH:mm:ss"))
-                $ListViewItem.SubItems.Add($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
-                $ListViewItem.SubItems.Add($appName)
-                $ListViewItem.SubItems.Add($path)
-                $ListViewItem.SubItems.Add($sig)
-                $ListViewItem.SubItems.Add($Sid)
-                $ListView.Items.Add($ListViewItem)
+                $ListViewItem.SubItems.Add($dateUTC.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
+                $ListViewItem.SubItems.Add($dateLocal.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
+                $ListViewItem.SubItems.Add($appName) | Out-Null
+                $ListViewItem.SubItems.Add($path) | Out-Null
+                $ListViewItem.SubItems.Add($sig) | Out-Null
+                $ListViewItem.SubItems.Add($Sid) | Out-Null
+                $ListView.Items.Add($ListViewItem) | Out-Null
             }
         }
     } catch {
-        Write-Warning "Failed to parse BAM key for SID $Sid"
+        # Silently ignore BAM key failures
     }
 
     $ProgressBar.Value = 100
@@ -126,12 +124,10 @@ function Start-BAMKeyAnalysis {
     $StartButton.Enabled = $true
 }
 
-
 $StartButton.Add_Click({
     $StartButton.Enabled = $false
     $StatusLabel.Text = "Status: Running analysis..."
     Start-BAMKeyAnalysis
 })
-
 
 [void]$Form.ShowDialog()
