@@ -86,37 +86,49 @@ function Start-BAMKeyAnalysis {
     $ProgressBar.Value = 50
 
     # ----- [BAM Key - HKLM] -----
-    $Sid = "S-1-5-21-3378492250-3557825890-1863683868-1003"
-    $BamPath = "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\$Sid"
+    $bamBasePath = "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State"
+    $userSettingsPath = Join-Path $bamBasePath "UserSettings"
+    
+    if (Test-Path $userSettingsPath) {
+        $sidPaths = Get-ChildItem -Path $userSettingsPath -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty PSPath
+    } elseif (Test-Path $bamBasePath) {
+        $sidPaths = Get-ChildItem -Path $bamBasePath -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer -and $_.Name -match '^S-\d-\d+-(\d+-){1,14}\d+$' } | Select-Object -ExpandProperty PSPath
+    } else {
+        $sidPaths = @()
+    }
 
-    try {
-        $BamItems = Get-ItemProperty -Path $BamPath | Select-Object -Property *
-        foreach ($entry in $BamItems.PSObject.Properties) {
-            $valName = $entry.Name
-            $data = $entry.Value
+    foreach ($sidPath in $sidPaths) {
+        $sid = Split-Path $sidPath -Leaf
 
-            if ($data.Length -eq 24) {
-                $fileTimeHex = [System.BitConverter]::ToString($data[7..0]) -replace "-", ""
-                $fileTime = [Convert]::ToInt64($fileTimeHex, 16)
-                $dateUTC = [DateTime]::FromFileTimeUtc($fileTime)
-                $dateLocal = $dateUTC.ToLocalTime()
+        try {
+            $BamItems = Get-ItemProperty -Path $sidPath | Select-Object -Property *
+            foreach ($entry in $BamItems.PSObject.Properties) {
+                $valName = $entry.Name
+                $data = $entry.Value
 
-                $path = $valName
-                $appName = [System.IO.Path]::GetFileName($valName)
-                $sig = Get-Signature -FilePath $path
+                if ($data.Length -eq 24) {
+                    $fileTimeHex = [System.BitConverter]::ToString($data[7..0]) -replace "-", ""
+                    $fileTime = [Convert]::ToInt64($fileTimeHex, 16)
+                    $dateUTC = [DateTime]::FromFileTimeUtc($fileTime)
+                    $dateLocal = $dateUTC.ToLocalTime()
 
-                $ListViewItem = New-Object Windows.Forms.ListViewItem($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
-                $ListViewItem.SubItems.Add($dateUTC.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
-                $ListViewItem.SubItems.Add($dateLocal.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
-                $ListViewItem.SubItems.Add($appName) | Out-Null
-                $ListViewItem.SubItems.Add($path) | Out-Null
-                $ListViewItem.SubItems.Add($sig) | Out-Null
-                $ListViewItem.SubItems.Add($Sid) | Out-Null
-                $ListView.Items.Add($ListViewItem) | Out-Null
+                    $path = $valName
+                    $appName = [System.IO.Path]::GetFileName($valName)
+                    $sig = Get-Signature -FilePath $path
+
+                    $ListViewItem = New-Object Windows.Forms.ListViewItem($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
+                    $ListViewItem.SubItems.Add($dateUTC.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
+                    $ListViewItem.SubItems.Add($dateLocal.ToString("yyyy-MM-dd HH:mm:ss")) | Out-Null
+                    $ListViewItem.SubItems.Add($appName) | Out-Null
+                    $ListViewItem.SubItems.Add($path) | Out-Null
+                    $ListViewItem.SubItems.Add($sig) | Out-Null
+                    $ListViewItem.SubItems.Add($sid) | Out-Null
+                    $ListView.Items.Add($ListViewItem) | Out-Null
+                }
             }
+        } catch {
+            # Silently ignore BAM key failures
         }
-    } catch {
-        # Silently ignore BAM key failures
     }
 
     $ProgressBar.Value = 100
