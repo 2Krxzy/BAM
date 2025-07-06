@@ -1,1 +1,137 @@
-d
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+
+$Form = New-Object Windows.Forms.Form
+$Form.Text = "BAM & MuiCache Parser"
+$Form.Size = New-Object Drawing.Size(1200, 600)
+$Form.StartPosition = "CenterScreen"
+
+$ListView = New-Object Windows.Forms.ListView
+$ListView.View = "Details"
+$ListView.FullRowSelect = $true
+$ListView.GridLines = $true
+$ListView.Size = New-Object Drawing.Size(1160, 450)
+$ListView.Location = New-Object Drawing.Point(10, 10)
+$ListView.Columns.Add("Execution Time", 130)
+$ListView.Columns.Add("User UTC Time", 130)
+$ListView.Columns.Add("Local Time", 130)
+$ListView.Columns.Add("App Name", 160)
+$ListView.Columns.Add("Path", 360)
+$ListView.Columns.Add("Signature", 120)
+$ListView.Columns.Add("SID/User", 120)
+
+$Form.Controls.Add($ListView)
+
+$StartButton = New-Object Windows.Forms.Button
+$StartButton.Text = "Start Analysis"
+$StartButton.Size = New-Object Drawing.Size(120, 30)
+$StartButton.Location = New-Object Drawing.Point(10, 470)
+
+$ProgressBar = New-Object Windows.Forms.ProgressBar
+$ProgressBar.Size = New-Object Drawing.Size(500, 20)
+$ProgressBar.Location = New-Object Drawing.Point(140, 475)
+
+$StatusLabel = New-Object Windows.Forms.Label
+$StatusLabel.Size = New-Object Drawing.Size(600, 20)
+$StatusLabel.Location = New-Object Drawing.Point(650, 475)
+$StatusLabel.Text = "Status: Idle"
+
+$Form.Controls.Add($StartButton)
+$Form.Controls.Add($ProgressBar)
+$Form.Controls.Add($StatusLabel)
+
+
+function Get-Signature {
+    param ($FilePath)
+    try {
+        $sig = Get-AuthenticodeSignature -FilePath $FilePath -ErrorAction Stop
+        if ($sig.Status -eq 'Valid') {
+            return $sig.SignerCertificate.Subject
+        } else {
+            return "Unsigned"
+        }
+    } catch {
+        return "N/A"
+    }
+}
+
+
+function Start-BAMKeyAnalysis {
+    $ListView.Items.Clear()
+    $ProgressBar.Value = 10
+
+    # ----- [MUI Cache - HKCU] -----
+    $MuiCacheKey = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
+    try {
+        $MuiProps = Get-ItemProperty -Path $MuiCacheKey | Select-Object -Property * -ErrorAction Stop
+        foreach ($prop in $MuiProps.PSObject.Properties) {
+            if ($prop.Name -like "*.exe*") {
+                $path = $prop.Name
+                $appName = [System.IO.Path]::GetFileName($path)
+                $sig = Get-Signature -FilePath $path
+
+                $ListViewItem = New-Object Windows.Forms.ListViewItem("")
+                $ListViewItem.SubItems.Add("")
+                $ListViewItem.SubItems.Add("")
+                $ListViewItem.SubItems.Add($appName)
+                $ListViewItem.SubItems.Add($path)
+                $ListViewItem.SubItems.Add($sig)
+                $ListViewItem.SubItems.Add("CurrentUser")
+                $ListView.Items.Add($ListViewItem)
+            }
+        }
+    } catch {
+        Write-Warning "Failed to parse MuiCache."
+    }
+
+    $ProgressBar.Value = 50
+
+    # ----- [BAM Key - HKLM] -----
+    $Sid = "S-1-5-21-3378492250-3557825890-1863683868-1003"
+    $BamPath = "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\$Sid"
+
+    try {
+        $BamItems = Get-ItemProperty -Path $BamPath | Select-Object -Property *
+        foreach ($entry in $BamItems.PSObject.Properties) {
+            $valName = $entry.Name
+            $data = $entry.Value
+
+            if ($data.Length -eq 24) {
+                $fileTimeHex = [System.BitConverter]::ToString($data[7..0]) -replace "-", ""
+                $fileTime = [Convert]::ToInt64($fileTimeHex, 16)
+                $dateUTC = [DateTime]::FromFileTimeUtc($fileTime)
+                $dateLocal = $dateUTC.ToLocalTime()
+
+                $path = $valName
+                $appName = [System.IO.Path]::GetFileName($valName)
+                $sig = Get-Signature -FilePath $path
+
+                $ListViewItem = New-Object Windows.Forms.ListViewItem($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
+                $ListViewItem.SubItems.Add($dateUTC.ToString("yyyy-MM-dd HH:mm:ss"))
+                $ListViewItem.SubItems.Add($dateLocal.ToString("yyyy-MM-dd HH:mm:ss"))
+                $ListViewItem.SubItems.Add($appName)
+                $ListViewItem.SubItems.Add($path)
+                $ListViewItem.SubItems.Add($sig)
+                $ListViewItem.SubItems.Add($Sid)
+                $ListView.Items.Add($ListViewItem)
+            }
+        }
+    } catch {
+        Write-Warning "Failed to parse BAM key for SID $Sid"
+    }
+
+    $ProgressBar.Value = 100
+    $StatusLabel.Text = "Status: Analysis Completed"
+    $StartButton.Enabled = $true
+}
+
+
+$StartButton.Add_Click({
+    $StartButton.Enabled = $false
+    $StatusLabel.Text = "Status: Running analysis..."
+    Start-BAMKeyAnalysis
+})
+
+
+[void]$Form.ShowDialog()
